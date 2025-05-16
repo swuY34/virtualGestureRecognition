@@ -19,6 +19,9 @@ def open_camera():
     stay_timer = 0
     hover_position = None
 
+    # 当前 detector 配置
+    current_max_hands = 1
+
     # 悬停切换相关
     hover_option = None  # "option1" 或 "option2" 或 None
     hover_switch_counter = 0
@@ -28,14 +31,20 @@ def open_camera():
     calculator = VirtualCalculator()
 
     def mouse_callback(event, x, y, flags, param):
-        nonlocal option1_active, option2_active
+        nonlocal option1_active, option2_active, detector, current_max_hands
         if event == cv2.EVENT_LBUTTONDOWN:
             if button1_x_start < x < button1_x_end and button1_y < y < button1_y + button_size:
-                option1_active = True
-                option2_active = False
+                if not option1_active:
+                    option1_active = True
+                    option2_active = False
+                    detector = HandDetector(maxHands=1, detectionCon=0.8)
+                    current_max_hands = 1
             elif button2_x_start < x < button2_x_end and button2_y < y < button2_y + button_size:
-                option1_active = False
-                option2_active = True
+                if not option2_active:
+                    option1_active = False
+                    option2_active = True
+                    detector = HandDetector(maxHands=2, detectionCon=0.8)
+                    current_max_hands = 2
 
     while True:
         ret, frame = cap.read()
@@ -98,29 +107,41 @@ def open_camera():
                     print(f"点击触发：{calculator.clicked_button_text}")
                 stay_timer = 0
 
-            # 新增：手指悬停切换 option1/option2
-            x, y = index_tip[0], index_tip[1]
-            if button1_x_start < x < button1_x_end and button1_y < y < button1_y + button_size:
-                if hover_option == "option1":
-                    hover_switch_counter += 1
-                else:
-                    hover_option = "option1"
-                    hover_switch_counter = 1
-                if hover_switch_counter >= HOVER_THRESHOLD and not option1_active:
-                    option1_active = True
-                    option2_active = False
-                    hover_switch_counter = 0
-            elif button2_x_start < x < button2_x_end and button2_y < y < button2_y + button_size:
-                if hover_option == "option2":
-                    hover_switch_counter += 1
-                else:
-                    hover_option = "option2"
-                    hover_switch_counter = 1
-                if hover_switch_counter >= HOVER_THRESHOLD and not option2_active:
-                    option1_active = False
-                    option2_active = True
-                    hover_switch_counter = 0
-            else:
+            # 修改后：任意一只手指尖悬停即可切换 option
+            hover_detected = False
+            for hand in hands:
+                tip = hand["lmList"][8]
+                x, y = tip[0], tip[1]
+                if button1_x_start < x < button1_x_end and button1_y < y < button1_y + button_size:
+                    if hover_option == "option1":
+                        hover_switch_counter += 1
+                    else:
+                        hover_option = "option1"
+                        hover_switch_counter = 1
+                    if hover_switch_counter >= HOVER_THRESHOLD and not option1_active:
+                        option1_active = True
+                        option2_active = False
+                        detector = HandDetector(maxHands=1, detectionCon=0.8)
+                        current_max_hands = 1
+                        hover_switch_counter = 0
+                    hover_detected = True
+                    break
+                elif button2_x_start < x < button2_x_end and button2_y < y < button2_y + button_size:
+                    if hover_option == "option2":
+                        hover_switch_counter += 1
+                    else:
+                        hover_option = "option2"
+                        hover_switch_counter = 1
+                    if hover_switch_counter >= HOVER_THRESHOLD and not option2_active:
+                        option1_active = False
+                        option2_active = True
+                        detector = HandDetector(maxHands=2, detectionCon=0.8)
+                        current_max_hands = 2
+                        hover_switch_counter = 0
+                    hover_detected = True
+                    break
+
+            if not hover_detected:
                 hover_option = None
                 hover_switch_counter = 0
 
